@@ -1,11 +1,11 @@
 #Introduction
 
 *mongobean* is a tiny, easy-to-use object wrapper for MongoDB. It provides classes that wrap documents, collections and cursors
-and makes it easy to work with them.
+and make it easy to work with them.
 
 #Usage
 
-Just download the source files and put them where Python finds them. To create a new document type, just inherit from the *Document* class:
+Just download the source files and put them where Python can find them. To create a new document type, just inherit from the *Document* class:
 ```python
 import mongobean.orm as orm
 
@@ -18,7 +18,7 @@ class Address(orm.Document):
 
 ##Creating and storing documents
 
-Working with documents is really easy. Following our example, you can just create new *Restaurant* object, put data in it (including references to other documents) and save it to the database:
+Working with documents is really easy. Following our example, you can just create a new *Restaurant* object, put data in it (including references to other documents) and save it to the database:
 ```python
 restaurant = Restaurant()
 #The document instance can be used like a dict to get and set attributes:
@@ -79,7 +79,7 @@ restaurant['address']['street']
 #This will result in another DB query and will print: u'Main avenue'
 ```
 
-As you can see, nested subdocuments are automatically loaded using the correct document class. Please note that the loading is *lazy* by default, i.e. the subdocument's attributes get fetched from the database only when accessed, thereby reducing loading times and avoiding problems with self-referencing documents. 
+As you can see, nested subdocuments are automatically loaded using the correct document class. Please note that the loading is *lazy* by default, i.e. the subdocument's attributes get fetched from the database only if needed, thereby reducing loading times and avoiding problems with self-referencing documents. 
 
 #Further reading
 
