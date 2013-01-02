@@ -1,7 +1,7 @@
 #Introduction
 
 *mongobean* is a tiny, easy-to-use object wrapper for MongoDB. It provides classes that wrap documents, collections and cursors
-and makes it easy to work with objects.
+and makes it easy to work with them.
 
 #Usage
 
@@ -9,10 +9,10 @@ Just download the source files and put them where Python finds them. To create a
 ```python
 import mongobean.orm as orm
 
-class Restaurant(Document):
+class Restaurant(orm.Document):
    pass
 
-class Address(Document):
+class Address(orm.Document):
   pass
 ```
 
