@@ -2,6 +2,7 @@ import copy
 import datetime
 
 import pymongo
+from bson.objectid import ObjectId
 import bson
 
 document_classes = {}
@@ -115,12 +116,14 @@ class Cursor(object):
         return self
 
     def next(self):
-    	json_document = self._cursor.next()
+        json_document = self._cursor.next()
         document = self._document_class()
         document.attributes = decode_document(json_document)
         return document
         
     def __getitem__(self,key):
+        if type(key) == slice:
+            return self.__class__(self._document_class,self._cursor.__getitem__(key))
         json_document = self._cursor[key]
         document = self._document_class()
         document.attributes = decode_document(json_document)
