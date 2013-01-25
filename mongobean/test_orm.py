@@ -30,7 +30,7 @@ class TestDocuments(unittest.TestCase):
         cls.connection.drop_database('test_database_2')
         cls.test_database_1 = cls.connection.test_database_1
         cls.test_database_2 = cls.connection.test_database_2
-        orm_default_db = lambda : cls.test_database_1
+        orm.default_db = cls.test_database_1
     
     @classmethod
     def tearDownClass(cls):
@@ -57,6 +57,23 @@ class TestDocuments(unittest.TestCase):
         self.assertEqual(self.test_database_2[custom_doc.collection_name].find({'_id':custom_doc.document_id}).count(),1)
         self.assertEqual(self.test_database_2[custom_doc.collection_name].find({'_id':custom_doc.document_id})[0],custom_doc.attributes)
         self.assertEqual(custom_doc,CustomDocument.collection.find_one({'_id':custom_doc.document_id}))
+
+    def test_embedded_document(self):
+        attributes = {'test' : "test"}
+        custom_doc = CustomDocument(**attributes)
+        
+        subdoc = TestDocument2(test = 1243,father = custom_doc,hashvalue = {'test':123,'foo':'bar'})
+        subdoc.embedded = True
+        custom_doc['subdoc'] = subdoc
+        custom_doc.save()
+        
+        loaded_doc = CustomDocument.collection.find_one({'_id':orm.ObjectId(custom_doc.document_id)})
+        
+        self.assertEqual(loaded_doc,custom_doc)
+        self.assertEqual(loaded_doc['subdoc'],subdoc)
+        self.assertEqual(subdoc.document_id,None)
+        self.assertRaises(AttributeError,subdoc.save)
+        self.assertRaises(AttributeError,subdoc.revert)
         
     
     def test_document_copying(self):

@@ -6,7 +6,11 @@ from bson.objectid import ObjectId
 import bson
 
 document_classes = {}
-default_db = lambda : pymongo.MongoClient().test
+
+default_db = None
+
+class DatabaseError(Exception):
+    pass
 
 def register(cls):
     document_classes[cls.type_name] = cls
@@ -21,20 +25,27 @@ def encode_document(document,cascade = False):
     elif isinstance(document,tuple):
         output_document = tuple(map(lambda x:encode_document(x),document))
     elif isinstance(document,Document):
-        if not document.document_id or cascade:
-            document.save()
-        output_document = {'_id':document.document_id,'_type':document.type_name}
+        if document.embedded:
+            output_document = {'_type':document.type_name,'_attributes':encode_document(document.attributes,cascade)}
+        else:
+            if not document.document_id or cascade:
+                document.save()
+            output_document = {'_id':document.document_id,'_type':document.type_name}
     else:
         output_document = document
     return output_document
 
 def decode_document(document):
     if isinstance(document,dict):
-        if '_type' in document and document['_type'] in document_classes and '_id' in document:
+        if '_type' in document and document['_type'] in document_classes and ('_id' in document or '_attributes' in document):
             document_class = document_classes[document['_type']]
             output_document = document_class()
-            output_document.document_id = document['_id']
-            output_document.set_lazy()
+            if '_id' in document:
+                output_document.document_id = document['_id']
+                output_document.set_lazy()
+            else:
+                output_document.attributes = decode_document(document['_attributes'])
+                output_document.embedded = True
         else:
             output_document = {}
             for (key,value) in document.items():
@@ -122,7 +133,7 @@ class Cursor(object):
         return document
         
     def __getitem__(self,key):
-        if type(key) == slice:
+        if isinstance(key,slice):
             return self.__class__(self._document_class,self._cursor.__getitem__(key))
         json_document = self._cursor[key]
         document = self._document_class()
@@ -177,36 +188,20 @@ class Document:
     def database(cls):
         if cls._database:
             return cls._database
-        return default_db()
+        if default_db == None:
+            raise DatabaseError("No default database configured!")
+        return default_db
 
     def __init__(self,**kwargs):
         self._attributes = kwargs
         self._is_lazy = False
-    
-    @property
-    def document_id(self):
-        if '_id' in self._attributes:
-            return self._attributes['_id']
-        return None
-    
-    @document_id.setter
-    def document_id(self,document_id):
-        self._attributes['_id'] = document_id
-
-    @property
-    def attributes(self):
-        if self._is_lazy:
-            self._is_lazy = False
-            self._attributes = self.collection.find_one({'_id':self.document_id}).attributes
-        return self._attributes
-    
-    @attributes.setter
-    def attributes(self,attributes):
-        self._attributes = attributes
-        self._is_lazy = False
+        self._embedded = False
         
     def __getitem__(self,key):
         return self.attributes[key]
+        
+    def __contains__(self,key):
+        return True if key in self.attributes else False
     
     def __setitem__(self,key,value):
         self.attributes[key] = value
@@ -237,10 +232,50 @@ class Document:
         else:
             return self.__class__.__name__+"(**"+str(self._attributes)+")"
 
+    @property
+    def embedded(self):
+        return self._embedded
+    
+    @embedded.setter
+    def embedded(self,embedded):
+        self._embedded = embedded
+        if embedded:
+            self.document_id = None
+    
+    @property
+    def document_id(self):
+        if '_id' in self._attributes:
+            return self._attributes['_id']
+        return None
+    
+    @document_id.setter
+    def document_id(self,document_id):
+        if document_id == None and '_id' in self._attributes:
+            del self._attributes['_id']
+        else:
+            self._attributes['_id'] = document_id
+
+    @property
+    def attributes(self):
+        if self._is_lazy:
+            self._is_lazy = False
+            self._attributes = self.collection.find_one({'_id':self.document_id}).attributes
+        return self._attributes
+    
+    @attributes.setter
+    def attributes(self,attributes):
+        self._attributes = attributes
+        self._is_lazy = False
+
+    def keys(self):
+        return self._attributes.keys()
+
     def set_lazy(self,is_lazy = True):
         self._is_lazy = is_lazy
         
     def save(self,cascade = False,revert_after = True):
+        if self.embedded:
+            raise AttributeError("Document is embedded!")
         if not self.document_id:
             self.document_id = bson.objectid.ObjectId()
         if not '_created_at' in self.attributes:
@@ -251,12 +286,16 @@ class Document:
             self.revert()
     
     def revert(self):
+        if self.embedded:
+            raise AttributeError("Document is embedded!")
         if self.document_id:
             self.attributes = self.collection.find_one({'_id':self.document_id}).attributes
         else:
             raise AttributeError("Document not saved to collection!")
     
     def delete(self):
+        if self.embedded:
+            raise AttributeError("Document is embedded!")
         if not self.document_id:
             return
         self.collection.remove({'_id':self.document_id})
