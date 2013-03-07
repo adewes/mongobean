@@ -80,8 +80,20 @@ class Collection(object):
         self.__dict__['_collection'] = collection
     
     def __getattr__(self,key):
+
+        def function_wrapper(collection,f,args,kwargs):
+            result = f(*args,**kwargs)
+            if isinstance(result,pymongo.cursor.Cursor):
+                return Cursor(collection._document_class,result)
+            if isinstance(result,pymongo.collection.Collection):
+                return Collection(collection._document_class,result)
+            return result
+
         if hasattr(self._collection,key):
-            return getattr(self._collection,key)
+            attr = getattr(self._collection,key)
+            if hasattr(attr,'__call__'):
+                return lambda *args,**kwargs:function_wrapper(self,attr,args,kwargs)
+
         raise AttributeError
     
     def __setattr__(self,key,value):
@@ -116,8 +128,21 @@ class Cursor(object):
         self.__dict__['_cursor'] = cursor
         
     def __getattr__(self,key):
+
+        def function_wrapper(cursor,f,args,kwargs):
+            result = f(*args,**kwargs)
+            if isinstance(result,pymongo.cursor.Cursor):
+                return Cursor(cursor._document_class,result)
+            if isinstance(result,pymongo.collection.Collection):
+                return Collection(cursor._document_class,result)
+            return result
+
         if hasattr(self._cursor,key):
-            return getattr(self._cursor,key)
+            attr = getattr(self._cursor,key)
+            if hasattr(attr,'__call__'):
+                return lambda *args,**kwargs:function_wrapper(self,attr,args,kwargs)
+            return attr
+
         raise AttributeError
         
     def __setattr__(self,key,value):
@@ -131,7 +156,7 @@ class Cursor(object):
         document = self._document_class()
         document.attributes = decode_document(json_document)
         return document
-        
+
     def __getitem__(self,key):
         if isinstance(key,slice):
             return self.__class__(self._document_class,self._cursor.__getitem__(key))
@@ -155,9 +180,15 @@ class classproperty(object):
     def __get__(self, instance, owner):
         return self.getter(owner)
 
-class Document:
+class Document(object):
 
     __metaclass__ = MetaDocumentClass
+    
+    class Meta:
+        
+        collection_name = None
+        type_name = None
+        database = None
     
     #The name of the collection the document is stored to. Defaults to the name of the class (in lowercase).
     _collection_name = None
@@ -196,7 +227,7 @@ class Document:
         self._attributes = kwargs
         self._is_lazy = False
         self._embedded = False
-        
+                
     def __getitem__(self,key):
         return self.attributes[key]
         
@@ -231,6 +262,14 @@ class Document:
             return "Lazy"+self.__class__.__name__+"(**"+str(self._attributes)+")"
         else:
             return self.__class__.__name__+"(**"+str(self._attributes)+")"
+
+    @property 
+    def created_at(self):
+        return self.attributes['_created_at']
+
+    @property
+    def updated_at(self):
+        return self.attributes['_updated_at']
 
     @property
     def embedded(self):
@@ -277,7 +316,8 @@ class Document:
         if self.embedded:
             raise AttributeError("Document is embedded!")
         if not self.document_id:
-            self.document_id = bson.objectid.ObjectId()
+            document_id = bson.objectid.ObjectId()
+            self.document_id = document_id
         if not '_created_at' in self.attributes:
             self.attributes['_created_at'] = datetime.datetime.now()
         self.attributes['_updated_at'] = datetime.datetime.now()
