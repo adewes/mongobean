@@ -12,6 +12,13 @@ default_db = None
 class DatabaseError(Exception):
     pass
 
+def ensure_indices():
+    for name,document_class in document_classes.items():
+        print name
+        if hasattr(document_class,'indices'):
+            print "Adding indices to class %s" % document_class.__name__
+            document_class.collection.create_index(document_class.indices)
+
 def register(cls):
     document_classes[cls.type_name] = cls
 
